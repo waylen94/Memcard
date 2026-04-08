@@ -1,10 +1,8 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 import '../data/card_provider.dart';
 import '../data/card_store.dart';
-import '../models/flashcard.dart';
+import 'bucket_study_screen.dart';
 
 class StudyTab extends StatefulWidget {
   const StudyTab({super.key});
@@ -14,8 +12,6 @@ class StudyTab extends StatefulWidget {
 }
 
 class _StudyTabState extends State<StudyTab> {
-  List<Flashcard> _queue = [];
-  bool _showBack = false;
   CardStore? _store;
 
   @override
@@ -23,149 +19,236 @@ class _StudyTabState extends State<StudyTab> {
     super.didChangeDependencies();
     final store = CardProvider.of(context);
     if (_store != store) {
-      _store?.removeListener(_onStoreChanged);
-      _store = store
-        ..addListener(_onStoreChanged);
-      _rebuildQueue();
+      _store?.removeListener(_rebuild);
+      _store = store..addListener(_rebuild);
     }
   }
 
   @override
   void dispose() {
-    _store?.removeListener(_onStoreChanged);
+    _store?.removeListener(_rebuild);
     super.dispose();
   }
 
-  void _rebuildQueue() {
-    final store = _store;
-    if (store == null) return;
-    final due = store.dueCards();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        _queue = List.of(due);
-        _showBack = false;
-      });
-    });
-  }
+  void _rebuild() => setState(() {});
 
-  void _onStoreChanged() => _rebuildQueue();
-
-  void _handleSwipe(bool remembered) {
-    if (_queue.isEmpty) return;
-    final store = _store ?? CardProvider.of(context);
-    final current = _queue.first;
-    store.recordReview(current, remembered: remembered);
-    setState(() {
-      _queue.removeAt(0);
-      if (!remembered) {
-        final reinsertionIndex = min(2, _queue.length);
-        _queue.insert(reinsertionIndex, current);
-      }
-      _showBack = false;
-    });
+  void _startStudy(List<StudyCard> cards) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BucketStudyScreen(title: 'My Cards', cards: cards),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final store = _store ?? CardProvider.of(context);
-    if (_queue.isEmpty) {
-      final dueLater = store.cards.length;
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Text(
-            dueLater == 0
-                ? 'Add cards to start studying.'
-                : 'All caught up. New cards will appear when they are due.',
-            textAlign: TextAlign.center,
-          ),
-        ),
-      );
-    }
+    final cs = Theme.of(context).colorScheme;
+    final due = store.dueCards();
+    final all = store.cards;
 
-    final card = _queue.first;
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
         children: [
-          const SizedBox(height: 12),
-          Expanded(
-            child: Dismissible(
-              key: ValueKey(card.id),
-              direction: DismissDirection.horizontal,
-              background: const _SwipeBackground(label: 'Remember', alignment: Alignment.centerLeft, color: Colors.green),
-              secondaryBackground: const _SwipeBackground(label: 'Forgot', alignment: Alignment.centerRight, color: Colors.red),
-              onDismissed: (direction) => _handleSwipe(direction == DismissDirection.startToEnd),
-              confirmDismiss: (direction) async {
-                // Let the card animate away and handle in onDismissed.
-                return true;
-              },
-              child: GestureDetector(
-                onTap: () => setState(() => _showBack = !_showBack),
-                child: Card(
-                  elevation: 3,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
-                        child: Text(
-                          _showBack ? card.back : card.front,
-                          key: ValueKey(_showBack),
-                          style: Theme.of(context).textTheme.headlineSmall,
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+          // Hero stat
+          _StatBanner(due: due.length, total: all.length),
+          const SizedBox(height: 28),
+
+          if (due.isNotEmpty) ...[
+            _SectionLabel('Due now'),
+            const SizedBox(height: 12),
+            _StudyActionCard(
+              icon: Icons.flash_on_rounded,
+              title: 'Study due cards',
+              subtitle: '${due.length} card${due.length == 1 ? '' : 's'} waiting',
+              color: cs.primary,
+              onTap: () => _startStudy(
+                due
+                    .map((c) => StudyCard(front: c.front, back: c.back))
+                    .toList(),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _handleSwipe(false),
-                  icon: const Icon(Icons.close),
-                  label: const Text('Forgot'),
-                ),
+            const SizedBox(height: 24),
+          ],
+
+          if (all.isNotEmpty) ...[
+            _SectionLabel('All cards'),
+            const SizedBox(height: 12),
+            _StudyActionCard(
+              icon: Icons.library_books_outlined,
+              title: 'Study all cards',
+              subtitle: '${all.length} card${all.length == 1 ? '' : 's'} total',
+              color: Colors.deepPurple,
+              onTap: () => _startStudy(
+                all
+                    .map((c) => StudyCard(front: c.front, back: c.back))
+                    .toList(),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () => _handleSwipe(true),
-                  icon: const Icon(Icons.check),
-                  label: const Text('Remember'),
-                ),
+            ),
+          ],
+
+          if (all.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 60),
+              child: Column(
+                children: [
+                  Icon(Icons.school_outlined,
+                      size: 64, color: cs.primary.withOpacity(0.3)),
+                  const SizedBox(height: 16),
+                  Text('No cards to study',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  Text('Add cards in the Cards tab to get started',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
+                      textAlign: TextAlign.center),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text('Tap to flip. Swipe right = remember, left = forgot.', style: Theme.of(context).textTheme.bodySmall),
+            ),
         ],
       ),
     );
   }
 }
 
-class _SwipeBackground extends StatelessWidget {
-  const _SwipeBackground({required this.label, required this.alignment, required this.color});
-  final String label;
-  final Alignment alignment;
-  final Color color;
+class _StatBanner extends StatelessWidget {
+  const _StatBanner({required this.due, required this.total});
+  final int due;
+  final int total;
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      alignment: alignment,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      color: color.withOpacity(0.15),
-      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [cs.primary, Color.lerp(cs.primary, cs.tertiary, 0.6)!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: cs.primary.withOpacity(isDark ? 0.3 : 0.2),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Ready to study?',
+                    style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(height: 4),
+                Text('$due due  ·  $total total',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5)),
+              ],
+            ),
+          ),
+          const Icon(Icons.bolt_rounded, color: Colors.white, size: 48),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(text,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              letterSpacing: 0.5,
+            ));
+  }
+}
+
+class _StudyActionCard extends StatelessWidget {
+  const _StudyActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: isDark ? const Color(0xFF1C1C2E) : Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color, size: 26),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 15)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color:
+                      Theme.of(context).colorScheme.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

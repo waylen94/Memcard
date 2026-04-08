@@ -22,18 +22,15 @@ class MainApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Memcard',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
-      ),
+      theme: _buildTheme(Brightness.light),
+      darkTheme: _buildTheme(Brightness.dark),
+      themeMode: ThemeMode.system,
       home: AnimatedBuilder(
         animation: authProvider,
         builder: (context, _) {
           switch (authProvider.status) {
             case AuthStatus.unknown:
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
+              return const _SplashScreen();
             case AuthStatus.unauthenticated:
               return _AuthGate(authProvider: authProvider);
             case AuthStatus.authenticated:
@@ -41,6 +38,102 @@ class MainApp extends StatelessWidget {
                   authProvider: authProvider, apiService: apiService);
           }
         },
+      ),
+    );
+  }
+
+  static ThemeData _buildTheme(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    const seed = Color(0xFF6C63FF); // vibrant purple
+    final cs = ColorScheme.fromSeed(
+      seedColor: seed,
+      brightness: brightness,
+    );
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: cs,
+      scaffoldBackgroundColor: isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF4F4FB),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color: isDark ? const Color(0xFF1C1C2E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      appBarTheme: AppBarTheme(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF4F4FB),
+        foregroundColor: isDark ? Colors.white : const Color(0xFF1A1A2E),
+        titleTextStyle: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.5,
+          color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        elevation: 0,
+        backgroundColor: isDark ? const Color(0xFF16162A) : Colors.white,
+        indicatorColor: seed.withOpacity(0.18),
+        labelTextStyle: WidgetStateProperty.all(
+          const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: isDark ? const Color(0xFF1C1C2E) : const Color(0xFFEEEEF8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: seed, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: seed,
+          foregroundColor: Colors.white,
+          minimumSize: const Size.fromHeight(52),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Splash
+// ---------------------------------------------------------------------------
+
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.style_rounded, size: 72, color: cs.primary),
+            const SizedBox(height: 16),
+            Text('Memcard',
+                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -1,
+                    )),
+            const SizedBox(height: 32),
+            const CircularProgressIndicator(),
+          ],
+        ),
       ),
     );
   }
@@ -63,76 +156,120 @@ class _AuthGateState extends State<_AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    if (_showLogin) {
-      return LoginScreen(
-        authProvider: widget.authProvider,
-        onGoToRegister: () => setState(() => _showLogin = false),
-      );
-    }
-    return RegisterScreen(
-      authProvider: widget.authProvider,
-      onGoToLogin: () => setState(() => _showLogin = true),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: _showLogin
+          ? LoginScreen(
+              key: const ValueKey('login'),
+              authProvider: widget.authProvider,
+              onGoToRegister: () => setState(() => _showLogin = false),
+            )
+          : RegisterScreen(
+              key: const ValueKey('register'),
+              authProvider: widget.authProvider,
+              onGoToLogin: () => setState(() => _showLogin = true),
+            ),
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Main home (authenticated)
+// Main home (authenticated) — bottom NavigationBar
 // ---------------------------------------------------------------------------
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage(
       {super.key, required this.authProvider, required this.apiService});
   final AuthProvider authProvider;
   final ApiService apiService;
 
   @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  int _index = 0;
+
+  static const _destinations = [
+    NavigationDestination(
+      icon: Icon(Icons.style_outlined),
+      selectedIcon: Icon(Icons.style),
+      label: 'Cards',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.school_outlined),
+      selectedIcon: Icon(Icons.school),
+      label: 'Study',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.translate_outlined),
+      selectedIcon: Icon(Icons.translate),
+      label: 'Vocab',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.folder_outlined),
+      selectedIcon: Icon(Icons.folder),
+      label: 'Buckets',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.store_outlined),
+      selectedIcon: Icon(Icons.store),
+      label: 'Market',
+    ),
+  ];
+
+  static const _titles = ['Cards', 'Study', 'Vocabulary', 'Buckets', 'Market'];
+
+  @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 5,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Memcard'),
-          actions: [
-            PopupMenuButton<_AppMenuAction>(
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_titles[_index]),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: PopupMenuButton<_AppMenuAction>(
+              icon: CircleAvatar(
+                radius: 18,
+                backgroundColor: cs.primary.withOpacity(0.15),
+                child: Icon(Icons.person_outline, color: cs.primary, size: 20),
+              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               onSelected: (action) {
-                if (action == _AppMenuAction.logout) authProvider.logout();
+                if (action == _AppMenuAction.logout) widget.authProvider.logout();
               },
-              itemBuilder: (_) => const [
+              itemBuilder: (_) => [
                 PopupMenuItem(
                   value: _AppMenuAction.logout,
                   child: Row(
                     children: [
-                      Icon(Icons.logout),
-                      SizedBox(width: 8),
-                      Text('Sign out'),
+                      Icon(Icons.logout, color: cs.error),
+                      const SizedBox(width: 10),
+                      Text('Sign out',
+                          style: TextStyle(color: cs.error, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
               ],
             ),
-          ],
-          bottom: const TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            tabs: [
-              Tab(icon: Icon(Icons.style_outlined), text: 'Cards'),
-              Tab(icon: Icon(Icons.school_outlined), text: 'Study'),
-              Tab(icon: Icon(Icons.translate_outlined), text: 'Vocabulary'),
-              Tab(icon: Icon(Icons.folder_outlined), text: 'Buckets'),
-              Tab(icon: Icon(Icons.store_outlined), text: 'Market'),
-            ],
           ),
-        ),
-        body: TabBarView(
-          children: [
-            const CardsTab(),
-            const StudyTab(),
-            VocabTab(authProvider: authProvider, apiService: apiService),
-            BucketsTab(authProvider: authProvider, apiService: apiService),
-            MarketTab(authProvider: authProvider, apiService: apiService),
-          ],
-        ),
+        ],
+      ),
+      body: IndexedStack(
+        index: _index,
+        children: [
+          const CardsTab(),
+          const StudyTab(),
+          VocabTab(authProvider: widget.authProvider, apiService: widget.apiService),
+          BucketsTab(authProvider: widget.authProvider, apiService: widget.apiService),
+          MarketTab(authProvider: widget.authProvider, apiService: widget.apiService),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
+        destinations: _destinations,
       ),
     );
   }
