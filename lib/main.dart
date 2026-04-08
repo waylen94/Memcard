@@ -5,9 +5,11 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
+import 'data/auth_provider.dart';
 import 'data/card_provider.dart';
 import 'data/card_store.dart';
 import 'models/flashcard.dart';
+import 'services/api_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,5 +24,14 @@ Future<void> main() async {
   final box = await Hive.openBox<Flashcard>('flashcards');
   final store = CardStore(box);
 
-  runApp(CardProvider(store: store, child: const MainApp()));
+  final apiService = ApiService();
+  final authProvider = AuthProvider(apiService: apiService);
+  await authProvider.tryRestoreSession();
+
+  runApp(
+    CardProvider(
+      store: store,
+      child: MainApp(authProvider: authProvider, apiService: apiService),
+    ),
+  );
 }
