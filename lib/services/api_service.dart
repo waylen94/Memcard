@@ -7,7 +7,7 @@ import '../models/user.dart';
 import '../models/vocabulary_word.dart';
 
 /// Base URL for all API calls. Change this to your server address.
-const String kBaseUrl = 'http://localhost';
+const String kBaseUrl = 'https://weilunliu.com';
 
 class ApiException implements Exception {
   ApiException(this.statusCode, this.message);
