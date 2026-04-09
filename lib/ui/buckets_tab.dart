@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/auth_provider.dart';
 import '../models/bucket.dart';
@@ -108,6 +109,11 @@ class _BucketsTabState extends State<BucketsTab> {
   }
 
   Future<void> _studyBucket(Bucket bucket) async {
+    // Persist this bucket so CardsTab can restore "Continue Learning"
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('last_bucket_id', bucket.id);
+    await prefs.setString('last_bucket_name', bucket.source);
+
     // Fetch words for this bucket via the market endpoint if public,
     // otherwise fall back to full sync and filter by bucket_id.
     List<VocabularyWord> words;

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'data/auth_provider.dart';
@@ -52,6 +53,13 @@ class MainApp extends StatelessWidget {
     return ThemeData(
       useMaterial3: true,
       colorScheme: cs,
+      // iOS-style smooth page transitions everywhere
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+        },
+      ),
       scaffoldBackgroundColor: isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF4F4FB),
       cardTheme: CardThemeData(
         elevation: 0,
@@ -74,6 +82,7 @@ class MainApp extends StatelessWidget {
         elevation: 0,
         backgroundColor: isDark ? const Color(0xFF16162A) : Colors.white,
         indicatorColor: seed.withOpacity(0.18),
+        height: 68,
         labelTextStyle: WidgetStateProperty.all(
           const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
         ),
@@ -223,6 +232,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_index]),
@@ -259,17 +269,26 @@ class _HomePageState extends State<HomePage> {
       body: IndexedStack(
         index: _index,
         children: [
-          const CardsTab(),
+          CardsTab(authProvider: widget.authProvider, apiService: widget.apiService),
           const StudyTab(),
           VocabTab(authProvider: widget.authProvider, apiService: widget.apiService),
           BucketsTab(authProvider: widget.authProvider, apiService: widget.apiService),
           MarketTab(authProvider: widget.authProvider, apiService: widget.apiService),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: _destinations,
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Divider(height: 0.5, thickness: 0.5,
+              color: isDark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.black.withOpacity(0.1)),
+          NavigationBar(
+            selectedIndex: _index,
+            onDestinationSelected: (i) => setState(() => _index = i),
+            destinations: _destinations,
+          ),
+        ],
       ),
     );
   }
