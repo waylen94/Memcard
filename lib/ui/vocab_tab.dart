@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 import '../data/auth_provider.dart';
+import '../data/vocab_store.dart';
 import '../models/vocabulary_word.dart';
 import '../services/api_service.dart';
 import 'bucket_study_screen.dart';
 
 class VocabTab extends StatefulWidget {
   const VocabTab(
-      {super.key, required this.authProvider, required this.apiService});
+      {super.key,
+      required this.authProvider,
+      required this.apiService,
+      required this.vocabStore});
   final AuthProvider authProvider;
   final ApiService apiService;
+  final VocabStore vocabStore;
 
   @override
   State<VocabTab> createState() => _VocabTabState();
@@ -17,52 +23,75 @@ class VocabTab extends StatefulWidget {
 
 class _VocabTabState extends State<VocabTab> {
   List<VocabularyWord> _words = [];
-  bool _loading = true;
+  bool _syncing = false;
   String? _error;
-  DateTime? _lastSyncedAt;
 
   @override
   void initState() {
     super.initState();
-    _sync();
+    _loadLocal();
   }
 
-  Future<void> _sync({bool incremental = false}) async {
+  // Reads words from the local cache instantly — no network involved.
+  // Auto-triggers a full sync the very first time (no lastSyncedAt yet).
+  void _loadLocal() {
+    setState(() => _words = widget.vocabStore.words);
+    if (widget.vocabStore.lastSyncedAt == null) _syncFromServer();
+  }
+
+  // Manual sync — pulls incremental changes (or full list on first run)
+  // and persists them locally. Called by the sync FAB and pull-to-refresh.
+  // To add a once-per-day gate later, check vocabStore.lastSyncedAt here.
+  Future<void> _syncFromServer() async {
+    if (_syncing) return;
     setState(() {
-      _loading = true;
+      _syncing = true;
       _error = null;
     });
     try {
       final token = widget.authProvider.token!;
       final result = await widget.apiService.syncVocabulary(
         token: token,
-        since: incremental ? _lastSyncedAt : null,
+        since: widget.vocabStore.lastSyncedAt, // null = full sync on first run
       );
-      setState(() {
-        if (incremental) {
-          final abandonedIds =
-              result.words.where((w) => w.abandoned).map((w) => w.id).toSet();
-          _words
-            ..removeWhere((w) => abandonedIds.contains(w.id))
-            ..addAll(result.words.where((w) => !w.abandoned));
-          _words.sort((a, b) => a.word.compareTo(b.word));
-        } else {
-          _words = result.words..sort((a, b) => a.word.compareTo(b.word));
-        }
-        _lastSyncedAt = result.syncedAt;
-        _loading = false;
-      });
+      await widget.vocabStore.applySync(result.words, result.syncedAt);
+      if (mounted) {
+        setState(() {
+          _words = widget.vocabStore.words;
+          _syncing = false;
+        });
+      }
     } on ApiException catch (e) {
-      setState(() {
-        _error = e.message;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() => _syncing = false);
+        if (_words.isEmpty) {
+          setState(() => _error = e.message);
+        } else {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(e.message)));
+        }
+      }
     } catch (_) {
-      setState(() {
-        _error = 'Failed to sync vocabulary.';
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() => _syncing = false);
+        if (_words.isEmpty) {
+          setState(() => _error = 'Failed to sync vocabulary.');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Sync failed. Showing cached data.')));
+        }
+      }
     }
+  }
+
+  String _formatLastSync() {
+    final t = widget.vocabStore.lastSyncedAt;
+    if (t == null) return 'Never synced';
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 1) return 'Synced just now';
+    if (diff.inHours < 1) return 'Synced ${diff.inMinutes}m ago';
+    if (diff.inDays < 1) return 'Synced ${diff.inHours}h ago';
+    return 'Synced ${diff.inDays}d ago';
   }
 
   Future<void> _openAddDialog() async {
@@ -73,15 +102,16 @@ class _VocabTabState extends State<VocabTab> {
       builder: (ctx) => _AddWordSheet(
         onSubmit: (word, meaning, sourceType, source) async {
           final token = widget.authProvider.token!;
-          await widget.apiService.addVocabulary(
+          final newWord = await widget.apiService.addVocabulary(
             token: token,
             word: word,
             meaning: meaning,
             sourceType: sourceType.isEmpty ? null : sourceType,
             source: source.isEmpty ? null : source,
           );
+          await widget.vocabStore.saveWord(newWord);
           if (ctx.mounted) Navigator.of(ctx).pop();
-          await _sync(incremental: true);
+          if (mounted) setState(() => _words = widget.vocabStore.words);
         },
       ),
     );
@@ -107,6 +137,7 @@ class _VocabTabState extends State<VocabTab> {
     try {
       await widget.apiService
           .abandonWord(token: widget.authProvider.token!, id: word.id);
+      await widget.vocabStore.removeWord(word.id);
       setState(() => _words.removeWhere((w) => w.id == word.id));
     } on ApiException catch (e) {
       if (mounted) {
@@ -171,6 +202,21 @@ class _VocabTabState extends State<VocabTab> {
               foregroundColor: Colors.white,
               child: const Icon(Icons.play_arrow_rounded),
             ),
+          const SizedBox(height: 8),
+          FloatingActionButton.small(
+            heroTag: 'sync_vocab',
+            onPressed: _syncing ? null : _syncFromServer,
+            tooltip: 'Sync with server',
+            backgroundColor: cs.tertiary,
+            foregroundColor: Colors.white,
+            child: _syncing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.sync_rounded),
+          ),
           const SizedBox(height: 10),
           FloatingActionButton.extended(
             heroTag: 'add_vocab',
@@ -183,7 +229,7 @@ class _VocabTabState extends State<VocabTab> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => _sync(),
+        onRefresh: _syncFromServer,
         child: _buildBody(),
       ),
     );
@@ -191,8 +237,12 @@ class _VocabTabState extends State<VocabTab> {
 
   Widget _buildBody() {
     final cs = Theme.of(context).colorScheme;
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
+    // First-ever launch: no cache yet + still fetching
+    if (_syncing && _words.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    // First-ever launch: no cache + sync failed
+    if (_error != null && _words.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -204,7 +254,8 @@ class _VocabTabState extends State<VocabTab> {
               const SizedBox(height: 12),
               Text(_error!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              OutlinedButton(onPressed: _sync, child: const Text('Retry')),
+              OutlinedButton(
+                  onPressed: _syncFromServer, child: const Text('Retry')),
             ],
           ),
         ),
@@ -233,25 +284,49 @@ class _VocabTabState extends State<VocabTab> {
         ),
       );
     }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-      itemCount: _words.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final w = _words[i];
-        return _VocabWordTile(
-          word: w,
-          onRemember: () => _markRemembered(w),
-          onAbandon: () => _abandon(w),
-        );
-      },
+    return Column(
+      children: [
+        // Thin progress bar while a background sync runs over cached data
+        if (_syncing) const LinearProgressIndicator(minHeight: 2),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+          child: Row(
+            children: [
+              Icon(Icons.cloud_done_outlined,
+                  size: 12, color: cs.onSurfaceVariant.withOpacity(0.45)),
+              const SizedBox(width: 5),
+              Text(
+                _formatLastSync(),
+                style: TextStyle(
+                    fontSize: 11,
+                    color: cs.onSurfaceVariant.withOpacity(0.45)),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+            itemCount: _words.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, i) {
+              final w = _words[i];
+              return _VocabWordTile(
+                word: w,
+                onRemember: () => _markRemembered(w),
+                onAbandon: () => _abandon(w),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
 
 // ── Vocab Word Tile ──────────────────────────────────────────────────────────
 
-class _VocabWordTile extends StatelessWidget {
+class _VocabWordTile extends StatefulWidget {
   const _VocabWordTile({
     required this.word,
     required this.onRemember,
@@ -262,11 +337,37 @@ class _VocabWordTile extends StatelessWidget {
   final VoidCallback onAbandon;
 
   @override
+  State<_VocabWordTile> createState() => _VocabWordTileState();
+}
+
+class _VocabWordTileState extends State<_VocabWordTile> {
+  final FlutterTts _tts = FlutterTts();
+  bool _speaking = false;
+
+  @override
+  void dispose() {
+    _tts.stop();
+    super.dispose();
+  }
+
+  Future<void> _speak() async {
+    if (_speaking) {
+      await _tts.stop();
+      if (mounted) setState(() => _speaking = false);
+      return;
+    }
+    setState(() => _speaking = true);
+    await _tts.speak(widget.word.word);
+    if (mounted) setState(() => _speaking = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final reviewSoon = word.nextReviewAt != null &&
-        word.nextReviewAt!.isBefore(DateTime.now().add(const Duration(days: 1)));
+    final reviewSoon = widget.word.nextReviewAt != null &&
+        widget.word.nextReviewAt!
+            .isBefore(DateTime.now().add(const Duration(days: 1)));
     return Material(
       color: isDark ? const Color(0xFF1C1C2E) : Colors.white,
       borderRadius: BorderRadius.circular(18),
@@ -285,9 +386,22 @@ class _VocabWordTile extends StatelessWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            word.word,
+                            widget.word.word,
                             style: const TextStyle(
                                 fontWeight: FontWeight.w700, fontSize: 15),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: _speak,
+                          child: Icon(
+                            _speaking
+                                ? Icons.stop_circle_outlined
+                                : Icons.volume_up_rounded,
+                            size: 18,
+                            color: _speaking
+                                ? cs.error
+                                : cs.primary.withOpacity(0.7),
                           ),
                         ),
                         if (reviewSoon) ...[  
@@ -309,15 +423,15 @@ class _VocabWordTile extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(word.meaning,
+                    Text(widget.word.meaning,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                             fontSize: 13, color: cs.onSurfaceVariant)),
-                    if (word.source != null) ...[  
+                    if (widget.word.source != null) ...[  
                       const SizedBox(height: 4),
                       Text(
-                        '${word.sourceType ?? ''} · ${word.source}',
+                        '${widget.word.sourceType ?? ''} · ${widget.word.source}',
                         style: TextStyle(
                             fontSize: 11,
                             color: cs.onSurfaceVariant.withOpacity(0.6)),
@@ -332,8 +446,8 @@ class _VocabWordTile extends StatelessWidget {
                 icon:
                     Icon(Icons.more_vert_rounded, color: cs.onSurfaceVariant),
                 onSelected: (action) {
-                  if (action == _WordAction.remember) onRemember();
-                  if (action == _WordAction.abandon) onAbandon();
+                  if (action == _WordAction.remember) widget.onRemember();
+                  if (action == _WordAction.abandon) widget.onAbandon();
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(

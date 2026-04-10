@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'data/auth_provider.dart';
+import 'data/vocab_store.dart';
 import 'services/api_service.dart';
 import 'ui/auth/login_screen.dart';
 import 'ui/auth/register_screen.dart';
@@ -13,10 +14,14 @@ import 'ui/vocab_tab.dart';
 
 class MainApp extends StatelessWidget {
   const MainApp(
-      {super.key, required this.authProvider, required this.apiService});
+      {super.key,
+      required this.authProvider,
+      required this.apiService,
+      required this.vocabStore});
 
   final AuthProvider authProvider;
   final ApiService apiService;
+  final VocabStore vocabStore;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +41,9 @@ class MainApp extends StatelessWidget {
               return _AuthGate(authProvider: authProvider);
             case AuthStatus.authenticated:
               return HomePage(
-                  authProvider: authProvider, apiService: apiService);
+                  authProvider: authProvider,
+                  apiService: apiService,
+                  vocabStore: vocabStore);
           }
         },
       ),
@@ -188,9 +195,13 @@ class _AuthGateState extends State<_AuthGate> {
 
 class HomePage extends StatefulWidget {
   const HomePage(
-      {super.key, required this.authProvider, required this.apiService});
+      {super.key,
+      required this.authProvider,
+      required this.apiService,
+      required this.vocabStore});
   final AuthProvider authProvider;
   final ApiService apiService;
+  final VocabStore vocabStore;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -271,7 +282,7 @@ class _HomePageState extends State<HomePage> {
         children: [
           CardsTab(authProvider: widget.authProvider, apiService: widget.apiService),
           const StudyTab(),
-          VocabTab(authProvider: widget.authProvider, apiService: widget.apiService),
+          VocabTab(authProvider: widget.authProvider, apiService: widget.apiService, vocabStore: widget.vocabStore),
           BucketsTab(authProvider: widget.authProvider, apiService: widget.apiService),
           MarketTab(authProvider: widget.authProvider, apiService: widget.apiService),
         ],
