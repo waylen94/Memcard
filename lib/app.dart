@@ -8,16 +8,15 @@ import 'ui/auth/login_screen.dart';
 import 'ui/auth/register_screen.dart';
 import 'ui/buckets_tab.dart';
 import 'ui/cards_tab.dart';
-import 'ui/market_tab.dart';
-import 'ui/study_tab.dart';
 import 'ui/vocab_tab.dart';
 
 class MainApp extends StatelessWidget {
-  const MainApp(
-      {super.key,
-      required this.authProvider,
-      required this.apiService,
-      required this.vocabStore});
+  const MainApp({
+    super.key,
+    required this.authProvider,
+    required this.apiService,
+    required this.vocabStore,
+  });
 
   final AuthProvider authProvider;
   final ApiService apiService;
@@ -41,9 +40,10 @@ class MainApp extends StatelessWidget {
               return _AuthGate(authProvider: authProvider);
             case AuthStatus.authenticated:
               return HomePage(
-                  authProvider: authProvider,
-                  apiService: apiService,
-                  vocabStore: vocabStore);
+                authProvider: authProvider,
+                apiService: apiService,
+                vocabStore: vocabStore,
+              );
           }
         },
       ),
@@ -53,10 +53,7 @@ class MainApp extends StatelessWidget {
   static ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     const seed = Color(0xFF6C63FF); // vibrant purple
-    final cs = ColorScheme.fromSeed(
-      seedColor: seed,
-      brightness: brightness,
-    );
+    final cs = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
     return ThemeData(
       useMaterial3: true,
       colorScheme: cs,
@@ -67,7 +64,9 @@ class MainApp extends StatelessWidget {
           TargetPlatform.android: CupertinoPageTransitionsBuilder(),
         },
       ),
-      scaffoldBackgroundColor: isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF4F4FB),
+      scaffoldBackgroundColor: isDark
+          ? const Color(0xFF0F0F1A)
+          : const Color(0xFFF4F4FB),
       cardTheme: CardThemeData(
         elevation: 0,
         color: isDark ? const Color(0xFF1C1C2E) : Colors.white,
@@ -76,7 +75,9 @@ class MainApp extends StatelessWidget {
       appBarTheme: AppBarTheme(
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF4F4FB),
+        backgroundColor: isDark
+            ? const Color(0xFF0F0F1A)
+            : const Color(0xFFF4F4FB),
         foregroundColor: isDark ? Colors.white : const Color(0xFF1A1A2E),
         titleTextStyle: TextStyle(
           fontSize: 22,
@@ -109,14 +110,19 @@ class MainApp extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: seed, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: seed,
           foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(52),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
@@ -141,11 +147,13 @@ class _SplashScreen extends StatelessWidget {
           children: [
             Icon(Icons.style_rounded, size: 72, color: cs.primary),
             const SizedBox(height: 16),
-            Text('Memcard',
-                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -1,
-                    )),
+            Text(
+              'Memcard',
+              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                letterSpacing: -1,
+              ),
+            ),
             const SizedBox(height: 32),
             const CircularProgressIndicator(),
           ],
@@ -194,11 +202,12 @@ class _AuthGateState extends State<_AuthGate> {
 // ---------------------------------------------------------------------------
 
 class HomePage extends StatefulWidget {
-  const HomePage(
-      {super.key,
-      required this.authProvider,
-      required this.apiService,
-      required this.vocabStore});
+  const HomePage({
+    super.key,
+    required this.authProvider,
+    required this.apiService,
+    required this.vocabStore,
+  });
   final AuthProvider authProvider;
   final ApiService apiService;
   final VocabStore vocabStore;
@@ -217,11 +226,6 @@ class _HomePageState extends State<HomePage> {
       label: 'Cards',
     ),
     NavigationDestination(
-      icon: Icon(Icons.school_outlined),
-      selectedIcon: Icon(Icons.school),
-      label: 'Study',
-    ),
-    NavigationDestination(
       icon: Icon(Icons.translate_outlined),
       selectedIcon: Icon(Icons.translate),
       label: 'Vocab',
@@ -231,14 +235,9 @@ class _HomePageState extends State<HomePage> {
       selectedIcon: Icon(Icons.folder),
       label: 'Buckets',
     ),
-    NavigationDestination(
-      icon: Icon(Icons.store_outlined),
-      selectedIcon: Icon(Icons.store),
-      label: 'Market',
-    ),
   ];
 
-  static const _titles = ['Cards', 'Study', 'Vocabulary', 'Buckets', 'Market'];
+  static const _titles = ['Cards', 'Vocabulary', 'Buckets'];
 
   @override
   Widget build(BuildContext context) {
@@ -256,9 +255,12 @@ class _HomePageState extends State<HomePage> {
                 backgroundColor: cs.primary.withOpacity(0.15),
                 child: Icon(Icons.person_outline, color: cs.primary, size: 20),
               ),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
               onSelected: (action) {
-                if (action == _AppMenuAction.logout) widget.authProvider.logout();
+                if (action == _AppMenuAction.logout)
+                  widget.authProvider.logout();
               },
               itemBuilder: (_) => [
                 PopupMenuItem(
@@ -267,8 +269,13 @@ class _HomePageState extends State<HomePage> {
                     children: [
                       Icon(Icons.logout, color: cs.error),
                       const SizedBox(width: 10),
-                      Text('Sign out',
-                          style: TextStyle(color: cs.error, fontWeight: FontWeight.w600)),
+                      Text(
+                        'Sign out',
+                        style: TextStyle(
+                          color: cs.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -280,20 +287,31 @@ class _HomePageState extends State<HomePage> {
       body: IndexedStack(
         index: _index,
         children: [
-          CardsTab(authProvider: widget.authProvider, apiService: widget.apiService),
-          const StudyTab(),
-          VocabTab(authProvider: widget.authProvider, apiService: widget.apiService, vocabStore: widget.vocabStore),
-          BucketsTab(authProvider: widget.authProvider, apiService: widget.apiService),
-          MarketTab(authProvider: widget.authProvider, apiService: widget.apiService),
+          CardsTab(
+            authProvider: widget.authProvider,
+            apiService: widget.apiService,
+          ),
+          VocabTab(
+            authProvider: widget.authProvider,
+            apiService: widget.apiService,
+            vocabStore: widget.vocabStore,
+          ),
+          BucketsTab(
+            authProvider: widget.authProvider,
+            apiService: widget.apiService,
+          ),
         ],
       ),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Divider(height: 0.5, thickness: 0.5,
-              color: isDark
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.black.withOpacity(0.1)),
+          Divider(
+            height: 0.5,
+            thickness: 0.5,
+            color: isDark
+                ? Colors.white.withOpacity(0.08)
+                : Colors.black.withOpacity(0.1),
+          ),
           NavigationBar(
             selectedIndex: _index,
             onDestinationSelected: (i) => setState(() => _index = i),

@@ -20,7 +20,7 @@ class Bucket {
   final int vocabulariesCount;
   final DateTime? updatedAt;
 
-  /// Populated only in market listings.
+  /// Populated when the API includes owner details.
   final User? owner;
 
   factory Bucket.fromJson(Map<String, dynamic> json) => Bucket(
