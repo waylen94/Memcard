@@ -8,8 +8,11 @@ import '../services/api_service.dart';
 import 'bucket_study_screen.dart';
 
 class BucketsTab extends StatefulWidget {
-  const BucketsTab(
-      {super.key, required this.authProvider, required this.apiService});
+  const BucketsTab({
+    super.key,
+    required this.authProvider,
+    required this.apiService,
+  });
   final AuthProvider authProvider;
   final ApiService apiService;
 
@@ -34,8 +37,9 @@ class _BucketsTabState extends State<BucketsTab> {
       _error = null;
     });
     try {
-      final buckets = await widget.apiService
-          .listBuckets(token: widget.authProvider.token!);
+      final buckets = await widget.apiService.listBuckets(
+        token: widget.authProvider.token!,
+      );
       setState(() {
         _buckets = buckets;
         _loading = false;
@@ -66,8 +70,9 @@ class _BucketsTabState extends State<BucketsTab> {
       });
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }
@@ -79,11 +84,13 @@ class _BucketsTabState extends State<BucketsTab> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Delete bucket?'),
         content: Text(
-            '"${bucket.source}" will be deleted. Words will remain but will no longer be grouped.'),
+          '"${bucket.source}" will be deleted. Words will remain but will no longer be grouped.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
@@ -98,12 +105,15 @@ class _BucketsTabState extends State<BucketsTab> {
     if (confirmed != true) return;
     try {
       await widget.apiService.deleteBucket(
-          token: widget.authProvider.token!, bucketId: bucket.id);
+        token: widget.authProvider.token!,
+        bucketId: bucket.id,
+      );
       setState(() => _buckets.removeWhere((b) => b.id == bucket.id));
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }
@@ -114,32 +124,28 @@ class _BucketsTabState extends State<BucketsTab> {
     await prefs.setInt('last_bucket_id', bucket.id);
     await prefs.setString('last_bucket_name', bucket.source);
 
-    // Fetch words for this bucket via the market endpoint if public,
-    // otherwise fall back to full sync and filter by bucket_id.
+    // Fetch the user's vocabulary and select words in this bucket.
     List<VocabularyWord> words;
     try {
-      if (bucket.isPublic) {
-        final result = await widget.apiService.getMarketBucketWords(
-            token: widget.authProvider.token!, bucketId: bucket.id);
-        words = result.words;
-      } else {
-        final result = await widget.apiService
-            .syncVocabulary(token: widget.authProvider.token!);
-        words = result.words
-            .where((w) => w.bucketId == bucket.id && !w.abandoned)
-            .toList();
-      }
+      final result = await widget.apiService.syncVocabulary(
+        token: widget.authProvider.token!,
+      );
+      words = result.words
+          .where((w) => w.bucketId == bucket.id && !w.abandoned)
+          .toList();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to load words for study')));
+          const SnackBar(content: Text('Failed to load words for study')),
+        );
       }
       return;
     }
     if (words.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No words in this bucket')));
+          const SnackBar(content: Text('No words in this bucket')),
+        );
       }
       return;
     }
@@ -163,10 +169,7 @@ class _BucketsTabState extends State<BucketsTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _buildBody(),
-      ),
+      body: RefreshIndicator(onRefresh: _load, child: _buildBody()),
     );
   }
 
@@ -180,8 +183,11 @@ class _BucketsTabState extends State<BucketsTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.wifi_off_rounded,
-                  size: 48, color: cs.onSurfaceVariant.withOpacity(0.4)),
+              Icon(
+                Icons.wifi_off_rounded,
+                size: 48,
+                color: cs.onSurfaceVariant.withOpacity(0.4),
+              ),
               const SizedBox(height: 12),
               Text(_error!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -196,21 +202,26 @@ class _BucketsTabState extends State<BucketsTab> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.folder_outlined,
-                size: 64, color: cs.primary.withOpacity(0.3)),
+            Icon(
+              Icons.folder_outlined,
+              size: 64,
+              color: cs.primary.withOpacity(0.3),
+            ),
             const SizedBox(height: 16),
-            Text('No buckets yet',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              'No buckets yet',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 6),
-            Text('Add words with a source to create a bucket',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: cs.onSurfaceVariant),
-                textAlign: TextAlign.center),
+            Text(
+              'Add words with a source to create a bucket',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       );
@@ -293,17 +304,22 @@ class _BucketCard extends StatelessWidget {
                     child: Text(
                       bucket.sourceType,
                       style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.8),
+                        color: Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.8,
+                      ),
                     ),
                   ),
                   PopupMenuButton<_BucketAction>(
-                    icon: const Icon(Icons.more_vert_rounded,
-                        color: Colors.white70, size: 18),
+                    icon: const Icon(
+                      Icons.more_vert_rounded,
+                      color: Colors.white70,
+                      size: 18,
+                    ),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                     onSelected: (a) {
                       if (a == _BucketAction.togglePublic) onTogglePublic();
                       if (a == _BucketAction.delete) onDelete();
@@ -311,25 +327,35 @@ class _BucketCard extends StatelessWidget {
                     itemBuilder: (_) => [
                       PopupMenuItem(
                         value: _BucketAction.togglePublic,
-                        child: Row(children: [
-                          Icon(bucket.isPublic
-                              ? Icons.lock_outline
-                              : Icons.public),
-                          const SizedBox(width: 8),
-                          Text(bucket.isPublic ? 'Make private' : 'Publish'),
-                        ]),
+                        child: Row(
+                          children: [
+                            Icon(
+                              bucket.isPublic
+                                  ? Icons.lock_outline
+                                  : Icons.public,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(bucket.isPublic ? 'Make private' : 'Publish'),
+                          ],
+                        ),
                       ),
                       PopupMenuItem(
                         value: _BucketAction.delete,
-                        child: Row(children: [
-                          Icon(Icons.delete_outline,
-                              color: Theme.of(context).colorScheme.error),
-                          const SizedBox(width: 8),
-                          Text('Delete',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.delete_outline,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Delete',
                               style: TextStyle(
-                                  color:
-                                      Theme.of(context).colorScheme.error)),
-                        ]),
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -349,13 +375,17 @@ class _BucketCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 14),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${bucket.vocabulariesCount} word${bucket.vocabulariesCount == 1 ? '' : 's'}',
                       style: TextStyle(
-                          fontSize: 12, color: cs.onSurfaceVariant),
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                     const Spacer(),
                     Row(
@@ -363,16 +393,21 @@ class _BucketCard extends StatelessWidget {
                         if (bucket.isPublic)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 7, vertical: 2),
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.green.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: const Text('Public',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.green)),
+                            child: const Text(
+                              'Public',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.green,
+                              ),
+                            ),
                           ),
                         const Spacer(),
                         GestureDetector(
@@ -383,8 +418,11 @@ class _BucketCard extends StatelessWidget {
                               color: accent.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Icon(Icons.play_arrow_rounded,
-                                color: accent, size: 20),
+                            child: Icon(
+                              Icons.play_arrow_rounded,
+                              color: accent,
+                              size: 20,
+                            ),
                           ),
                         ),
                       ],
