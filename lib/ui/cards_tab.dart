@@ -76,23 +76,11 @@ class _CardsTabState extends State<CardsTab> {
     setState(() => _studyLoading = true);
     try {
       final token = widget.authProvider.token!;
-      List<StudyCard> cards;
-      // Try the market/public endpoint first; fall back to sync+filter
-      try {
-        final result = await widget.apiService.getMarketBucketWords(
-          token: token,
-          bucketId: _continueBucketId!,
-        );
-        cards = result.words
-            .map((w) => StudyCard(front: w.word, back: w.meaning, remoteId: w.id))
-            .toList();
-      } catch (_) {
-        final result = await widget.apiService.syncVocabulary(token: token);
-        cards = result.words
-            .where((w) => w.bucketId == _continueBucketId && !w.abandoned)
-            .map((w) => StudyCard(front: w.word, back: w.meaning, remoteId: w.id))
-            .toList();
-      }
+      final result = await widget.apiService.syncVocabulary(token: token);
+      final cards = result.words
+          .where((w) => w.bucketId == _continueBucketId && !w.abandoned)
+          .map((w) => StudyCard(front: w.word, back: w.meaning, remoteId: w.id))
+          .toList();
 
       if (!mounted) return;
       if (cards.isEmpty) {
@@ -122,6 +110,20 @@ class _CardsTabState extends State<CardsTab> {
     }
   }
 
+  void _startLocalStudy(String title, List<Flashcard> cards) {
+    if (cards.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BucketStudyScreen(
+          title: title,
+          cards: cards
+              .map((card) => StudyCard(front: card.front, back: card.back))
+              .toList(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = CardProvider.of(context);
@@ -130,6 +132,7 @@ class _CardsTabState extends State<CardsTab> {
       animation: store,
       builder: (context, _) {
         final cards = store.cards;
+        final dueCards = store.dueCards();
         return Scaffold(
           backgroundColor: Colors.transparent,
           floatingActionButton: FloatingActionButton.extended(
@@ -157,6 +160,35 @@ class _CardsTabState extends State<CardsTab> {
                 ),
               ),
 
+              if (cards.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: dueCards.isEmpty
+                                ? null
+                                : () => _startLocalStudy('Due Cards', dueCards),
+                            icon: const Icon(Icons.flash_on_rounded),
+                            label: Text('Due (${dueCards.length})'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () =>
+                                _startLocalStudy('All Cards', cards),
+                            icon: const Icon(Icons.library_books_outlined),
+                            label: Text('All (${cards.length})'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
               if (cards.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
@@ -164,20 +196,23 @@ class _CardsTabState extends State<CardsTab> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.style_outlined,
-                            size: 64, color: cs.primary.withOpacity(0.35)),
+                        Icon(
+                          Icons.style_outlined,
+                          size: 64,
+                          color: cs.primary.withOpacity(0.35),
+                        ),
                         const SizedBox(height: 16),
-                        Text('No local cards yet',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700)),
+                        Text(
+                          'No local cards yet',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
                         const SizedBox(height: 6),
-                        Text('Tap + below to create your first flashcard',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(
+                          'Tap + below to create your first flashcard',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant),
+                        ),
                       ],
                     ),
                   ),
@@ -191,7 +226,8 @@ class _CardsTabState extends State<CardsTab> {
                       children: [
                         Text(
                           'MY CARDS',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
                                 color: cs.onSurfaceVariant,
                                 letterSpacing: 1.2,
                                 fontWeight: FontWeight.w700,
@@ -200,7 +236,9 @@ class _CardsTabState extends State<CardsTab> {
                         const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 3),
+                            horizontal: 10,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: cs.primary.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(20),
@@ -208,9 +246,10 @@ class _CardsTabState extends State<CardsTab> {
                           child: Text(
                             '${cards.length}',
                             style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: cs.primary),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: cs.primary,
+                            ),
                           ),
                         ),
                       ],
@@ -244,8 +283,11 @@ class _CardsTabState extends State<CardsTab> {
     );
   }
 
-  Future<void> _openEditor(BuildContext context, CardStore store,
-      {Flashcard? card}) async {
+  Future<void> _openEditor(
+    BuildContext context,
+    CardStore store, {
+    Flashcard? card,
+  }) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -268,20 +310,24 @@ class _CardsTabState extends State<CardsTab> {
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             title: const Text('Delete card?'),
             content: const Text('This action cannot be undone.'),
             actions: [
               TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel')),
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
               FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                    minimumSize: const Size(80, 40),
-                  ),
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Delete')),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  minimumSize: const Size(80, 40),
+                ),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Delete'),
+              ),
             ],
           ),
         ) ??
@@ -333,10 +379,7 @@ class _ContinueLearningCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              cs.primary,
-              Color.lerp(cs.primary, cs.tertiary, 0.55)!,
-            ],
+            colors: [cs.primary, Color.lerp(cs.primary, cs.tertiary, 0.55)!],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -362,10 +405,15 @@ class _ContinueLearningCard extends StatelessWidget {
                   ? const Padding(
                       padding: EdgeInsets.all(14),
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
-                  : const Icon(Icons.play_arrow_rounded,
-                      color: Colors.white, size: 30),
+                  : const Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 30,
+                    ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -397,8 +445,11 @@ class _ContinueLearningCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            const Icon(Icons.arrow_forward_ios_rounded,
-                color: Colors.white70, size: 15),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Colors.white70,
+              size: 15,
+            ),
           ],
         ),
       ),
@@ -409,8 +460,11 @@ class _ContinueLearningCard extends StatelessWidget {
 // ── Card Tile ────────────────────────────────────────────────────────────────
 
 class _CardTile extends StatelessWidget {
-  const _CardTile(
-      {required this.card, required this.onTap, required this.onDelete});
+  const _CardTile({
+    required this.card,
+    required this.onTap,
+    required this.onDelete,
+  });
   final Flashcard card;
   final VoidCallback onTap;
   final VoidCallback onDelete;
@@ -433,17 +487,25 @@ class _CardTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(card.front,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 15)),
+                    Text(
+                      card.front,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(card.back,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 13, color: cs.onSurfaceVariant)),
+                    Text(
+                      card.back,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -451,20 +513,29 @@ class _CardTile extends StatelessWidget {
               if (isDue)
                 Container(
                   margin: const EdgeInsets.only(right: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.primary.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text('Due',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: cs.primary)),
+                  child: Text(
+                    'Due',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: cs.primary,
+                    ),
+                  ),
                 ),
               IconButton(
-                icon: Icon(Icons.delete_outline_rounded,
-                    color: cs.onSurfaceVariant, size: 20),
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  color: cs.onSurfaceVariant,
+                  size: 20,
+                ),
                 onPressed: onDelete,
                 splashRadius: 20,
               ),
@@ -488,10 +559,12 @@ class _CardEditorSheet extends StatefulWidget {
 }
 
 class _CardEditorSheetState extends State<_CardEditorSheet> {
-  late final TextEditingController _front =
-      TextEditingController(text: widget.card?.front ?? '');
-  late final TextEditingController _back =
-      TextEditingController(text: widget.card?.back ?? '');
+  late final TextEditingController _front = TextEditingController(
+    text: widget.card?.front ?? '',
+  );
+  late final TextEditingController _back = TextEditingController(
+    text: widget.card?.back ?? '',
+  );
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
 
@@ -536,10 +609,9 @@ class _CardEditorSheetState extends State<_CardEditorSheet> {
             const SizedBox(height: 16),
             Text(
               widget.card == null ? 'New Card' : 'Edit Card',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w800),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
@@ -566,7 +638,9 @@ class _CardEditorSheetState extends State<_CardEditorSheet> {
                       if (!_formKey.currentState!.validate()) return;
                       setState(() => _loading = true);
                       await widget.onSubmit(
-                          _front.text.trim(), _back.text.trim());
+                        _front.text.trim(),
+                        _back.text.trim(),
+                      );
                       if (mounted) setState(() => _loading = false);
                     },
               child: _loading
@@ -574,7 +648,10 @@ class _CardEditorSheetState extends State<_CardEditorSheet> {
                       height: 20,
                       width: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : const Text('Save'),
             ),
           ],
@@ -583,4 +660,3 @@ class _CardEditorSheetState extends State<_CardEditorSheet> {
     );
   }
 }
-

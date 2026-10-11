@@ -29,17 +29,6 @@ class SyncResult {
   final List<VocabularyWord> words;
 }
 
-class MarketBucketWords {
-  const MarketBucketWords({
-    required this.bucket,
-    required this.count,
-    required this.words,
-  });
-  final Bucket bucket;
-  final int count;
-  final List<VocabularyWord> words;
-}
-
 class ApiService {
   ApiService({http.Client? client}) : _client = client ?? http.Client();
 
@@ -74,7 +63,8 @@ class ApiService {
     String message;
     try {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
-      message = body['message'] as String? ??
+      message =
+          body['message'] as String? ??
           body['error'] as String? ??
           response.reasonPhrase ??
           'Unknown error';
@@ -140,6 +130,21 @@ class ApiService {
     _assertSuccess(response);
   }
 
+  /// Permanently deletes the authenticated account and its server-side data.
+  /// The server must implement this endpoint; logout is not a substitute.
+  Future<void> deleteAccount({required String token}) async {
+    final response = await _client
+        .delete(_uri('/auth/account'), headers: _headers(token: token))
+        .timeout(const Duration(seconds: 30));
+    _assertSuccess(response);
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw ApiException(
+        response.statusCode,
+        'Account deletion has not been confirmed as complete. Please try again later.',
+      );
+    }
+  }
+
   /// GET /api/auth/me
   Future<User> getMe({required String token}) async {
     final response = await _client.get(
@@ -197,7 +202,8 @@ class ApiService {
     );
     _assertSuccess(response);
     return VocabularyWord.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
   }
 
   /// POST /api/mobile/vocabulary/{id}/remember
@@ -230,9 +236,7 @@ class ApiService {
     );
     _assertSuccess(response);
     final list = jsonDecode(response.body) as List<dynamic>;
-    return list
-        .map((e) => Bucket.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return list.map((e) => Bucket.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   /// PATCH /api/mobile/buckets/{bucket}
@@ -260,42 +264,5 @@ class ApiService {
       headers: _headers(token: token),
     );
     _assertSuccess(response);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Market
-  // ---------------------------------------------------------------------------
-
-  /// GET /api/mobile/market
-  Future<List<Bucket>> browseMarket({required String token}) async {
-    final response = await _client.get(
-      _uri('/mobile/market'),
-      headers: _headers(token: token),
-    );
-    _assertSuccess(response);
-    final list = jsonDecode(response.body) as List<dynamic>;
-    return list
-        .map((e) => Bucket.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
-
-  /// GET /api/mobile/market/{bucket}/words
-  Future<MarketBucketWords> getMarketBucketWords({
-    required String token,
-    required int bucketId,
-  }) async {
-    final response = await _client.get(
-      _uri('/mobile/market/$bucketId/words'),
-      headers: _headers(token: token),
-    );
-    _assertSuccess(response);
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return MarketBucketWords(
-      bucket: Bucket.fromJson(json['bucket'] as Map<String, dynamic>),
-      count: json['count'] as int,
-      words: (json['words'] as List<dynamic>)
-          .map((e) => VocabularyWord.fromJson(e as Map<String, dynamic>))
-          .toList(),
-    );
   }
 }
