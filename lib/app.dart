@@ -219,6 +219,93 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _index = 0;
 
+  Future<void> _deleteAccount() async {
+    var deleting = false;
+    String? error;
+    final messenger = ScaffoldMessenger.of(context);
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => PopScope(
+          canPop: !deleting,
+          child: AlertDialog(
+            title: const Text('Delete account?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This permanently deletes your account, vocabulary, buckets, '
+                  'and study progress, including saved flashcards on this device. '
+                  'This cannot be undone.',
+                ),
+                if (deleting) ...[
+                  const SizedBox(height: 20),
+                  const Center(child: CircularProgressIndicator()),
+                  const SizedBox(height: 12),
+                  const Text('Deleting your account…'),
+                ],
+                if (error != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: deleting
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                ),
+                onPressed: deleting
+                    ? null
+                    : () async {
+                        setDialogState(() {
+                          deleting = true;
+                          error = null;
+                        });
+                        final deleted = await widget.authProvider
+                            .deleteAccount();
+                        if (!dialogContext.mounted) return;
+                        if (deleted) {
+                          Navigator.of(dialogContext).pop();
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                widget.authProvider.errorMessage ??
+                                    'Your account has been deleted.',
+                              ),
+                            ),
+                          );
+                        } else {
+                          setDialogState(() {
+                            deleting = false;
+                            error =
+                                widget.authProvider.errorMessage ??
+                                'Unable to delete your account. Please try again.';
+                          });
+                        }
+                      },
+                child: const Text('Delete Account'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   static const _destinations = [
     NavigationDestination(
       icon: Icon(Icons.style_outlined),
@@ -250,6 +337,7 @@ class _HomePageState extends State<HomePage> {
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: PopupMenuButton<_AppMenuAction>(
+              tooltip: 'Account',
               icon: CircleAvatar(
                 radius: 18,
                 backgroundColor: cs.primary.withOpacity(0.15),
@@ -259,10 +347,23 @@ class _HomePageState extends State<HomePage> {
                 borderRadius: BorderRadius.circular(14),
               ),
               onSelected: (action) {
-                if (action == _AppMenuAction.logout)
+                if (action == _AppMenuAction.logout) {
                   widget.authProvider.logout();
+                } else if (action == _AppMenuAction.deleteAccount) {
+                  _deleteAccount();
+                }
               },
               itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: _AppMenuAction.deleteAccount,
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_forever_outlined, color: cs.error),
+                      const SizedBox(width: 10),
+                      Text('Delete Account', style: TextStyle(color: cs.error)),
+                    ],
+                  ),
+                ),
                 PopupMenuItem(
                   value: _AppMenuAction.logout,
                   child: Row(
@@ -323,4 +424,4 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-enum _AppMenuAction { logout }
+enum _AppMenuAction { logout, deleteAccount }

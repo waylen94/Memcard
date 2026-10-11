@@ -8,11 +8,12 @@ import '../services/api_service.dart';
 import 'bucket_study_screen.dart';
 
 class VocabTab extends StatefulWidget {
-  const VocabTab(
-      {super.key,
-      required this.authProvider,
-      required this.apiService,
-      required this.vocabStore});
+  const VocabTab({
+    super.key,
+    required this.authProvider,
+    required this.apiService,
+    required this.vocabStore,
+  });
   final AuthProvider authProvider;
   final ApiService apiService;
   final VocabStore vocabStore;
@@ -54,6 +55,12 @@ class _VocabTabState extends State<VocabTab> {
         token: token,
         since: widget.vocabStore.lastSyncedAt, // null = full sync on first run
       );
+      if (!mounted ||
+          widget.authProvider.token != token ||
+          widget.authProvider.isDeletingAccount) {
+        if (mounted) setState(() => _syncing = false);
+        return;
+      }
       await widget.vocabStore.applySync(result.words, result.syncedAt);
       if (mounted) {
         setState(() {
@@ -67,8 +74,9 @@ class _VocabTabState extends State<VocabTab> {
         if (_words.isEmpty) {
           setState(() => _error = e.message);
         } else {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(e.message)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(e.message)));
         }
       }
     } catch (_) {
@@ -78,7 +86,8 @@ class _VocabTabState extends State<VocabTab> {
           setState(() => _error = 'Failed to sync vocabulary.');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Sync failed. Showing cached data.')));
+            const SnackBar(content: Text('Sync failed. Showing cached data.')),
+          );
         }
       }
     }
@@ -109,6 +118,11 @@ class _VocabTabState extends State<VocabTab> {
             sourceType: sourceType.isEmpty ? null : sourceType,
             source: source.isEmpty ? null : source,
           );
+          if (!mounted ||
+              widget.authProvider.token != token ||
+              widget.authProvider.isDeletingAccount) {
+            return;
+          }
           await widget.vocabStore.saveWord(newWord);
           if (ctx.mounted) Navigator.of(ctx).pop();
           if (mounted) setState(() => _words = widget.vocabStore.words);
@@ -125,40 +139,49 @@ class _VocabTabState extends State<VocabTab> {
         content: Text('"${word.word}" will be removed from your vocabulary.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Abandon')),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Abandon'),
+          ),
         ],
       ),
     );
     if (confirmed != true) return;
     try {
-      await widget.apiService
-          .abandonWord(token: widget.authProvider.token!, id: word.id);
+      await widget.apiService.abandonWord(
+        token: widget.authProvider.token!,
+        id: word.id,
+      );
       await widget.vocabStore.removeWord(word.id);
       setState(() => _words.removeWhere((w) => w.id == word.id));
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }
 
   Future<void> _markRemembered(VocabularyWord word) async {
     try {
-      await widget.apiService
-          .rememberWord(token: widget.authProvider.token!, id: word.id);
+      await widget.apiService.rememberWord(
+        token: widget.authProvider.token!,
+        id: word.id,
+      );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Marked as remembered ✓')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Marked as remembered ✓')));
       }
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }
@@ -166,11 +189,7 @@ class _VocabTabState extends State<VocabTab> {
   void _startStudy() {
     if (_words.isEmpty) return;
     final cards = _words
-        .map((w) => StudyCard(
-              front: w.word,
-              back: w.meaning,
-              remoteId: w.id,
-            ))
+        .map((w) => StudyCard(front: w.word, back: w.meaning, remoteId: w.id))
         .toList();
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -214,7 +233,10 @@ class _VocabTabState extends State<VocabTab> {
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
                 : const Icon(Icons.sync_rounded),
           ),
           const SizedBox(height: 10),
@@ -228,10 +250,7 @@ class _VocabTabState extends State<VocabTab> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _syncFromServer,
-        child: _buildBody(),
-      ),
+      body: RefreshIndicator(onRefresh: _syncFromServer, child: _buildBody()),
     );
   }
 
@@ -249,13 +268,18 @@ class _VocabTabState extends State<VocabTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.wifi_off_rounded,
-                  size: 48, color: cs.onSurfaceVariant.withOpacity(0.4)),
+              Icon(
+                Icons.wifi_off_rounded,
+                size: 48,
+                color: cs.onSurfaceVariant.withOpacity(0.4),
+              ),
               const SizedBox(height: 12),
               Text(_error!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               OutlinedButton(
-                  onPressed: _syncFromServer, child: const Text('Retry')),
+                onPressed: _syncFromServer,
+                child: const Text('Retry'),
+              ),
             ],
           ),
         ),
@@ -266,20 +290,25 @@ class _VocabTabState extends State<VocabTab> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.translate_outlined,
-                size: 64, color: cs.primary.withOpacity(0.3)),
+            Icon(
+              Icons.translate_outlined,
+              size: 64,
+              color: cs.primary.withOpacity(0.3),
+            ),
             const SizedBox(height: 16),
-            Text('No vocabulary yet',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              'No vocabulary yet',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 6),
-            Text('Tap Add Word to get started',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: cs.onSurfaceVariant)),
+            Text(
+              'Tap Add Word to get started',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
           ],
         ),
       );
@@ -292,14 +321,18 @@ class _VocabTabState extends State<VocabTab> {
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
           child: Row(
             children: [
-              Icon(Icons.cloud_done_outlined,
-                  size: 12, color: cs.onSurfaceVariant.withOpacity(0.45)),
+              Icon(
+                Icons.cloud_done_outlined,
+                size: 12,
+                color: cs.onSurfaceVariant.withOpacity(0.45),
+              ),
               const SizedBox(width: 5),
               Text(
                 _formatLastSync(),
                 style: TextStyle(
-                    fontSize: 11,
-                    color: cs.onSurfaceVariant.withOpacity(0.45)),
+                  fontSize: 11,
+                  color: cs.onSurfaceVariant.withOpacity(0.45),
+                ),
               ),
             ],
           ),
@@ -365,9 +398,11 @@ class _VocabWordTileState extends State<_VocabWordTile> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final reviewSoon = widget.word.nextReviewAt != null &&
-        widget.word.nextReviewAt!
-            .isBefore(DateTime.now().add(const Duration(days: 1)));
+    final reviewSoon =
+        widget.word.nextReviewAt != null &&
+        widget.word.nextReviewAt!.isBefore(
+          DateTime.now().add(const Duration(days: 1)),
+        );
     return Material(
       color: isDark ? const Color(0xFF1C1C2E) : Colors.white,
       borderRadius: BorderRadius.circular(18),
@@ -388,7 +423,9 @@ class _VocabWordTileState extends State<_VocabWordTile> {
                           child: Text(
                             widget.word.word,
                             style: const TextStyle(
-                                fontWeight: FontWeight.w700, fontSize: 15),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 4),
@@ -404,37 +441,47 @@ class _VocabWordTileState extends State<_VocabWordTile> {
                                 : cs.primary.withOpacity(0.7),
                           ),
                         ),
-                        if (reviewSoon) ...[  
+                        if (reviewSoon) ...[
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 7, vertical: 2),
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: cs.primary.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: Text('Review',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: cs.primary)),
+                            child: Text(
+                              'Review',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: cs.primary,
+                              ),
+                            ),
                           ),
                         ],
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(widget.word.meaning,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 13, color: cs.onSurfaceVariant)),
-                    if (widget.word.source != null) ...[  
+                    Text(
+                      widget.word.meaning,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    if (widget.word.source != null) ...[
                       const SizedBox(height: 4),
                       Text(
                         '${widget.word.sourceType ?? ''} · ${widget.word.source}',
                         style: TextStyle(
-                            fontSize: 11,
-                            color: cs.onSurfaceVariant.withOpacity(0.6)),
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant.withOpacity(0.6),
+                        ),
                       ),
                     ],
                   ],
@@ -442,28 +489,34 @@ class _VocabWordTileState extends State<_VocabWordTile> {
               ),
               PopupMenuButton<_WordAction>(
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-                icon:
-                    Icon(Icons.more_vert_rounded, color: cs.onSurfaceVariant),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                icon: Icon(Icons.more_vert_rounded, color: cs.onSurfaceVariant),
                 onSelected: (action) {
                   if (action == _WordAction.remember) widget.onRemember();
                   if (action == _WordAction.abandon) widget.onAbandon();
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(
-                      value: _WordAction.remember,
-                      child: Row(children: [
+                    value: _WordAction.remember,
+                    child: Row(
+                      children: [
                         Icon(Icons.check_circle_outline, color: Colors.green),
                         SizedBox(width: 8),
                         Text('Mark remembered'),
-                      ])),
+                      ],
+                    ),
+                  ),
                   PopupMenuItem(
-                      value: _WordAction.abandon,
-                      child: Row(children: [
+                    value: _WordAction.abandon,
+                    child: Row(
+                      children: [
                         Icon(Icons.block_outlined, color: Colors.red),
                         SizedBox(width: 8),
                         Text('Abandon'),
-                      ])),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -483,7 +536,12 @@ enum _WordAction { remember, abandon }
 class _AddWordSheet extends StatefulWidget {
   const _AddWordSheet({required this.onSubmit});
   final Future<void> Function(
-      String word, String meaning, String sourceType, String source) onSubmit;
+    String word,
+    String meaning,
+    String sourceType,
+    String source,
+  )
+  onSubmit;
 
   @override
   State<_AddWordSheet> createState() => _AddWordSheetState();
@@ -538,12 +596,13 @@ class _AddWordSheetState extends State<_AddWordSheet> {
               ),
             ),
             const SizedBox(height: 14),
-            Text('Add Word',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w800),
-                textAlign: TextAlign.center),
+            Text(
+              'Add Word',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 18),
             TextFormField(
               controller: _wordCtrl,
@@ -566,8 +625,9 @@ class _AddWordSheetState extends State<_AddWordSheet> {
                 Expanded(
                   child: TextFormField(
                     controller: _sourceTypeCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Type (e.g. book)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Type (e.g. book)',
+                    ),
                     textInputAction: TextInputAction.next,
                   ),
                 ),
@@ -575,8 +635,9 @@ class _AddWordSheetState extends State<_AddWordSheet> {
                 Expanded(
                   child: TextFormField(
                     controller: _sourceCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Source title'),
+                    decoration: const InputDecoration(
+                      labelText: 'Source title',
+                    ),
                     textInputAction: TextInputAction.done,
                   ),
                 ),
@@ -602,7 +663,10 @@ class _AddWordSheetState extends State<_AddWordSheet> {
                       height: 20,
                       width: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : const Text('Save'),
             ),
           ],

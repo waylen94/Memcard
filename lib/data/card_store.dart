@@ -9,6 +9,11 @@ class CardStore extends ChangeNotifier {
   CardStore(this._box);
   final Box<Flashcard> _box;
 
+  Future<void> clear() async {
+    await _box.clear();
+    notifyListeners();
+  }
+
   List<Flashcard> get cards {
     final list = _box.values.toList();
     list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -17,10 +22,13 @@ class CardStore extends ChangeNotifier {
 
   List<Flashcard> dueCards({DateTime? now}) {
     final nowTs = now ?? DateTime.now();
-    final list = cards
-        .where((c) => c.dueAt.isBefore(nowTs) || c.dueAt.isAtSameMomentAs(nowTs))
-        .toList()
-      ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
+    final list =
+        cards
+            .where(
+              (c) => c.dueAt.isBefore(nowTs) || c.dueAt.isAtSameMomentAs(nowTs),
+            )
+            .toList()
+          ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
     return list;
   }
 
@@ -38,7 +46,11 @@ class CardStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateCard(String id, {required String front, required String back}) async {
+  Future<void> updateCard(
+    String id, {
+    required String front,
+    required String back,
+  }) async {
     final card = _box.get(id);
     if (card == null) return;
     card.front = front;
@@ -57,7 +69,9 @@ class CardStore extends ChangeNotifier {
     final currentInterval = card.intervalDays;
     final nextInterval = remembered ? max(0.7, currentInterval * 1.8) : 0.1;
     card.intervalDays = nextInterval;
-    card.dueAt = now.add(Duration(milliseconds: (nextInterval * 24 * 60 * 60 * 1000).round()));
+    card.dueAt = now.add(
+      Duration(milliseconds: (nextInterval * 24 * 60 * 60 * 1000).round()),
+    );
     card.lastReviewedAt = now;
     await card.save();
     notifyListeners();

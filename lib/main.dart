@@ -32,7 +32,17 @@ Future<void> main() async {
   final vocabStore = VocabStore(vocabBox, prefs);
 
   final apiService = ApiService();
-  final authProvider = AuthProvider(apiService: apiService);
+  final authProvider = AuthProvider(
+    apiService: apiService,
+    clearAccountData: () async {
+      await Future.wait([
+        store.clear(),
+        vocabStore.clear(),
+        prefs.remove('last_bucket_id'),
+        prefs.remove('last_bucket_name'),
+      ]);
+    },
+  );
   await authProvider.tryRestoreSession();
 
   runApp(

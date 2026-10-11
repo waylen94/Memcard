@@ -130,6 +130,21 @@ class ApiService {
     _assertSuccess(response);
   }
 
+  /// Permanently deletes the authenticated account and its server-side data.
+  /// The server must implement this endpoint; logout is not a substitute.
+  Future<void> deleteAccount({required String token}) async {
+    final response = await _client
+        .delete(_uri('/auth/account'), headers: _headers(token: token))
+        .timeout(const Duration(seconds: 30));
+    _assertSuccess(response);
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw ApiException(
+        response.statusCode,
+        'Account deletion has not been confirmed as complete. Please try again later.',
+      );
+    }
+  }
+
   /// GET /api/auth/me
   Future<User> getMe({required String token}) async {
     final response = await _client.get(

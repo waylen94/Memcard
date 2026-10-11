@@ -9,9 +9,13 @@ const _kTokenKey = 'auth_token';
 enum AuthStatus { unknown, authenticated, unauthenticated }
 
 class AuthProvider extends ChangeNotifier {
-  AuthProvider({required ApiService apiService}) : _api = apiService;
+  AuthProvider({required ApiService apiService, this.clearAccountData})
+    : _api = apiService;
 
   final ApiService _api;
+  final Future<void> Function()? clearAccountData;
+  bool _deletingAccount = false;
+  bool get isDeletingAccount => _deletingAccount;
 
   AuthStatus _status = AuthStatus.unknown;
   User? _user;
@@ -97,6 +101,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    if (_deletingAccount) return;
     final t = _token;
     if (t != null) {
       try {
@@ -116,6 +121,54 @@ class AuthProvider extends ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  Future<bool> deleteAccount() async {
+    final t = _token;
+    if (t == null || _deletingAccount) return false;
+    _deletingAccount = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _api.deleteAccount(token: t);
+    } on ApiException catch (e) {
+      _errorMessage = e.statusCode == 404 || e.statusCode == 405
+          ? 'Account deletion is currently unavailable. Please try again later.'
+          : e.message;
+      _deletingAccount = false;
+      notifyListeners();
+      return false;
+    } catch (_) {
+      _errorMessage =
+          'Could not confirm account deletion. Check your connection and try again.';
+      _deletingAccount = false;
+      notifyListeners();
+      return false;
+    }
+
+    // Only clear the session after the server confirms permanent deletion.
+    _token = null;
+    _user = null;
+    _status = AuthStatus.unauthenticated;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!await prefs.remove(_kTokenKey)) {
+        throw StateError('Could not remove the saved session.');
+      }
+    } catch (_) {
+      _errorMessage =
+          'Your account was deleted, but some data could not be removed from this device.';
+    }
+    try {
+      await clearAccountData?.call();
+    } catch (_) {
+      _errorMessage =
+          'Your account was deleted, but some data could not be removed from this device.';
+    } finally {
+      _deletingAccount = false;
+      notifyListeners();
+    }
+    return true;
   }
 
   // ---------------------------------------------------------------------------

@@ -19,11 +19,17 @@ class VocabStore {
 
   static const _lastSyncKey = 'vocab_last_sync';
 
+  Future<void> clear() async {
+    await _box.clear();
+    await _prefs.remove(_lastSyncKey);
+  }
+
   /// All locally cached words, sorted alphabetically.
   List<VocabularyWord> get words {
     return _box.values
-        .map((s) => VocabularyWord.fromJson(
-            jsonDecode(s) as Map<String, dynamic>))
+        .map(
+          (s) => VocabularyWord.fromJson(jsonDecode(s) as Map<String, dynamic>),
+        )
         .toList()
       ..sort((a, b) => a.word.compareTo(b.word));
   }
@@ -39,7 +45,9 @@ class VocabStore {
   /// - upserts active words
   /// - records the sync timestamp
   Future<void> applySync(
-      List<VocabularyWord> incoming, DateTime syncedAt) async {
+    List<VocabularyWord> incoming,
+    DateTime syncedAt,
+  ) async {
     final toDelete = incoming
         .where((w) => w.abandoned)
         .map((w) => w.id.toString())
