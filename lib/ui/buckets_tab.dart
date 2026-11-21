@@ -57,26 +57,6 @@ class _BucketsTabState extends State<BucketsTab> {
     }
   }
 
-  Future<void> _togglePublic(Bucket bucket) async {
-    try {
-      final updated = await widget.apiService.updateBucket(
-        token: widget.authProvider.token!,
-        bucketId: bucket.id,
-        isPublic: !bucket.isPublic,
-      );
-      setState(() {
-        final idx = _buckets.indexWhere((b) => b.id == updated.id);
-        if (idx != -1) _buckets[idx] = updated;
-      });
-    } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
-      }
-    }
-  }
-
   Future<void> _delete(Bucket bucket) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -239,7 +219,6 @@ class _BucketsTabState extends State<BucketsTab> {
       itemBuilder: (context, i) => _BucketCard(
         bucket: _buckets[i],
         onStudy: () => _studyBucket(_buckets[i]),
-        onTogglePublic: () => _togglePublic(_buckets[i]),
         onDelete: () => _delete(_buckets[i]),
       ),
     );
@@ -252,13 +231,11 @@ class _BucketCard extends StatelessWidget {
   const _BucketCard({
     required this.bucket,
     required this.onStudy,
-    required this.onTogglePublic,
     required this.onDelete,
   });
 
   final Bucket bucket;
   final VoidCallback onStudy;
-  final VoidCallback onTogglePublic;
   final VoidCallback onDelete;
 
   // Deterministic color from bucket id
@@ -321,24 +298,9 @@ class _BucketCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     onSelected: (a) {
-                      if (a == _BucketAction.togglePublic) onTogglePublic();
                       if (a == _BucketAction.delete) onDelete();
                     },
                     itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: _BucketAction.togglePublic,
-                        child: Row(
-                          children: [
-                            Icon(
-                              bucket.isPublic
-                                  ? Icons.lock_outline
-                                  : Icons.public,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(bucket.isPublic ? 'Make private' : 'Publish'),
-                          ],
-                        ),
-                      ),
                       PopupMenuItem(
                         value: _BucketAction.delete,
                         child: Row(
@@ -390,25 +352,6 @@ class _BucketCard extends StatelessWidget {
                     const Spacer(),
                     Row(
                       children: [
-                        if (bucket.isPublic)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Text(
-                              'Public',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.green,
-                              ),
-                            ),
-                          ),
                         const Spacer(),
                         GestureDetector(
                           onTap: onStudy,
@@ -438,4 +381,4 @@ class _BucketCard extends StatelessWidget {
   }
 }
 
-enum _BucketAction { togglePublic, delete }
+enum _BucketAction { delete }

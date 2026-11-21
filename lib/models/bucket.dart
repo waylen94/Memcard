@@ -6,7 +6,6 @@ class Bucket {
     required this.userId,
     required this.sourceType,
     required this.source,
-    required this.isPublic,
     required this.vocabulariesCount,
     this.updatedAt,
     this.owner,
@@ -16,7 +15,6 @@ class Bucket {
   final int userId;
   final String sourceType;
   final String source;
-  final bool isPublic;
   final int vocabulariesCount;
   final DateTime? updatedAt;
 
@@ -28,7 +26,6 @@ class Bucket {
         userId: json['user_id'] as int,
         sourceType: json['source_type'] as String,
         source: json['source'] as String,
-        isPublic: json['is_public'] == true || json['is_public'] == 1,
         vocabulariesCount: json['vocabularies_count'] as int? ?? 0,
         updatedAt: json['updated_at'] != null
             ? DateTime.parse(json['updated_at'] as String)
@@ -36,16 +33,5 @@ class Bucket {
         owner: json['user'] != null
             ? User.fromJson(json['user'] as Map<String, dynamic>)
             : null,
-      );
-
-  Bucket copyWith({bool? isPublic}) => Bucket(
-        id: id,
-        userId: userId,
-        sourceType: sourceType,
-        source: source,
-        isPublic: isPublic ?? this.isPublic,
-        vocabulariesCount: vocabulariesCount,
-        updatedAt: updatedAt,
-        owner: owner,
       );
 }
