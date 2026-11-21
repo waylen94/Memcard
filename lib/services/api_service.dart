@@ -239,21 +239,6 @@ class ApiService {
     return list.map((e) => Bucket.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  /// PATCH /api/mobile/buckets/{bucket}
-  Future<Bucket> updateBucket({
-    required String token,
-    required int bucketId,
-    required bool isPublic,
-  }) async {
-    final response = await _client.patch(
-      _uri('/mobile/buckets/$bucketId'),
-      headers: _headers(token: token),
-      body: jsonEncode({'is_public': isPublic}),
-    );
-    _assertSuccess(response);
-    return Bucket.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
   /// DELETE /api/mobile/buckets/{bucket}
   Future<void> deleteBucket({
     required String token,
