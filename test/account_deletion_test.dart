@@ -1,3 +1,5 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_secure_storage/test/test_flutter_secure_storage_platform.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -6,13 +8,18 @@ import 'package:memcard/services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Use the plugin's platform interface to simulate device storage failures.
 // ignore: depend_on_referenced_packages
-import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  const tokenStorage = FlutterSecureStorage();
+
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
+  });
 
   test('queued deletion preserves the session and local data', () async {
-    SharedPreferences.setMockInitialValues({'auth_token': 'test-token'});
+    FlutterSecureStorage.setMockInitialValues({'auth_token': 'test-token'});
     var cleared = false;
     final auth = AuthProvider(
       apiService: ApiService(
@@ -36,55 +43,47 @@ void main() {
     expect(auth.isAuthenticated, isTrue);
     expect(cleared, isFalse);
     expect(auth.isDeletingAccount, isFalse);
-    expect(
-      (await SharedPreferences.getInstance()).getString('auth_token'),
-      'test-token',
-    );
+    expect(await tokenStorage.read(key: 'auth_token'), 'test-token');
   });
 
-  for (final throws in [false, true]) {
-    test(
-      'local data cleanup runs when token removal ${throws ? "throws" : "fails"}',
-      () async {
-        SharedPreferences.setMockInitialValues({'auth_token': 'test-token'});
-        final originalStore = SharedPreferencesStorePlatform.instance;
-        var cleared = false;
-        final auth = AuthProvider(
-          apiService: ApiService(
-            client: MockClient((request) async {
-              if (request.method == 'GET') {
-                return http.Response(
-                  '{"user":{"id":1,"name":"Test","email":"test@example.com"}}',
-                  200,
-                );
-              }
-              return http.Response('', 204);
-            }),
-          ),
-          clearAccountData: () async {
-            cleared = true;
-          },
-        );
-        await auth.tryRestoreSession();
-        SharedPreferencesStorePlatform.instance = _FailingRemovalStore(throws);
-        try {
-          expect(await auth.deleteAccount(), isTrue);
-          expect(cleared, isTrue);
-          expect(auth.token, isNull);
-          expect(auth.isAuthenticated, isFalse);
-          expect(auth.isDeletingAccount, isFalse);
-          expect(auth.errorMessage, contains('could not be removed'));
-        } finally {
-          SharedPreferencesStorePlatform.instance = originalStore;
-        }
+  test('local data cleanup runs when secure token removal fails', () async {
+    FlutterSecureStorage.setMockInitialValues({'auth_token': 'test-token'});
+    final originalStore = FlutterSecureStoragePlatform.instance;
+    var cleared = false;
+    final auth = AuthProvider(
+      apiService: ApiService(
+        client: MockClient((request) async {
+          if (request.method == 'GET') {
+            return http.Response(
+              '{"user":{"id":1,"name":"Test","email":"test@example.com"}}',
+              200,
+            );
+          }
+          return http.Response('', 204);
+        }),
+      ),
+      clearAccountData: () async {
+        cleared = true;
       },
     );
-  }
+    await auth.tryRestoreSession();
+    FlutterSecureStoragePlatform.instance = _FailingRemovalStore();
+    try {
+      expect(await auth.deleteAccount(), isTrue);
+      expect(cleared, isTrue);
+      expect(auth.token, isNull);
+      expect(auth.isAuthenticated, isFalse);
+      expect(auth.isDeletingAccount, isFalse);
+      expect(auth.errorMessage, contains('could not be removed'));
+    } finally {
+      FlutterSecureStoragePlatform.instance = originalStore;
+    }
+  });
 
   test(
     'deletion authenticates, clears data, and removes the saved session',
     () async {
-      SharedPreferences.setMockInitialValues({'auth_token': 'test-token'});
+      FlutterSecureStorage.setMockInitialValues({'auth_token': 'test-token'});
       var cleared = false;
       final auth = AuthProvider(
         apiService: ApiService(
@@ -106,20 +105,49 @@ void main() {
         },
       );
       await auth.tryRestoreSession();
+      expect(await tokenStorage.read(key: 'auth_token'), 'test-token');
       expect(await auth.deleteAccount(), isTrue);
+      expect(await tokenStorage.read(key: 'auth_token'), isNull);
       expect(cleared, isTrue);
       expect(auth.status, AuthStatus.unauthenticated);
       expect(auth.token, isNull);
       expect(auth.user, isNull);
-      expect(
-        (await SharedPreferences.getInstance()).getString('auth_token'),
-        isNull,
-      );
     },
   );
 
+  test('login saves the token securely and logout removes it', () async {
+    SharedPreferences.setMockInitialValues({});
+    final auth = AuthProvider(
+      apiService: ApiService(
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/logout')) {
+            expect(request.headers['Authorization'], 'Bearer test-token');
+            return http.Response('', 204);
+          }
+          return http.Response(
+            '{"token":"test-token","user":{"id":1,"name":"Test","email":"test@example.com"}}',
+            200,
+          );
+        }),
+      ),
+    );
+
+    expect(
+      await auth.login(email: 'test@example.com', password: 'test'),
+      isTrue,
+    );
+    expect(await tokenStorage.read(key: 'auth_token'), 'test-token');
+    expect(
+      (await SharedPreferences.getInstance()).getString('auth_token'),
+      isNull,
+    );
+    await auth.logout();
+    expect(await tokenStorage.read(key: 'auth_token'), isNull);
+    expect(auth.status, AuthStatus.unauthenticated);
+  });
+
   test('server failure preserves account and local data for retry', () async {
-    SharedPreferences.setMockInitialValues({'auth_token': 'test-token'});
+    FlutterSecureStorage.setMockInitialValues({'auth_token': 'test-token'});
     var cleared = false;
     final auth = AuthProvider(
       apiService: ApiService(
@@ -144,30 +172,18 @@ void main() {
     expect(auth.token, 'test-token');
     expect(auth.errorMessage, 'Please try again.');
     expect(auth.isDeletingAccount, isFalse);
-    expect(
-      (await SharedPreferences.getInstance()).getString('auth_token'),
-      'test-token',
-    );
+    expect(await tokenStorage.read(key: 'auth_token'), 'test-token');
   });
 }
 
-class _FailingRemovalStore extends SharedPreferencesStorePlatform {
-  _FailingRemovalStore(this.throws);
-  final bool throws;
+class _FailingRemovalStore extends TestFlutterSecureStoragePlatform {
+  _FailingRemovalStore() : super({'auth_token': 'test-token'});
 
   @override
-  Future<bool> clear() async => throw UnimplementedError();
-
-  @override
-  Future<Map<String, Object>> getAll() async => throw UnimplementedError();
-
-  @override
-  Future<bool> setValue(String valueType, String key, Object value) async =>
-      throw UnimplementedError();
-
-  @override
-  Future<bool> remove(String key) async {
-    if (throws) throw StateError('Device storage unavailable');
-    return false;
+  Future<void> delete({
+    required String key,
+    required Map<String, String> options,
+  }) async {
+    throw StateError('Secure storage unavailable');
   }
 }

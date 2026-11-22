@@ -1,10 +1,18 @@
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/user.dart';
 import '../services/api_service.dart';
 
 const _kTokenKey = 'auth_token';
+const _tokenStorage = FlutterSecureStorage(
+  iOptions: IOSOptions(
+    accessibility: KeychainAccessibility.unlocked_this_device,
+  ),
+  mOptions: MacOsOptions(
+    accessibility: KeychainAccessibility.unlocked_this_device,
+  ),
+);
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
 
@@ -33,20 +41,25 @@ class AuthProvider extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   Future<void> tryRestoreSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedToken = prefs.getString(_kTokenKey);
-    if (savedToken == null) {
-      _status = AuthStatus.unauthenticated;
-      notifyListeners();
-      return;
-    }
     try {
-      final user = await _api.getMe(token: savedToken);
-      _token = savedToken;
-      _user = user;
-      _status = AuthStatus.authenticated;
+      final savedToken = await _tokenStorage.read(key: _kTokenKey);
+      if (savedToken == null) {
+        _status = AuthStatus.unauthenticated;
+      } else {
+        _user = await _api.getMe(token: savedToken);
+        _token = savedToken;
+        _status = AuthStatus.authenticated;
+      }
+    } on ApiException catch (e) {
+      _status = AuthStatus.unauthenticated;
+      if (e.statusCode == 401) {
+        try {
+          await _tokenStorage.delete(key: _kTokenKey);
+        } catch (_) {
+          _errorMessage = 'Could not remove the saved session.';
+        }
+      }
     } catch (_) {
-      await prefs.remove(_kTokenKey);
       _status = AuthStatus.unauthenticated;
     }
     notifyListeners();
@@ -110,8 +123,11 @@ class AuthProvider extends ChangeNotifier {
         // Best-effort — clear locally regardless.
       }
     }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kTokenKey);
+    try {
+      await _tokenStorage.delete(key: _kTokenKey);
+    } catch (_) {
+      _errorMessage = 'Could not remove the saved session.';
+    }
     _token = null;
     _user = null;
     _status = AuthStatus.unauthenticated;
@@ -151,10 +167,7 @@ class AuthProvider extends ChangeNotifier {
     _user = null;
     _status = AuthStatus.unauthenticated;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      if (!await prefs.remove(_kTokenKey)) {
-        throw StateError('Could not remove the saved session.');
-      }
+      await _tokenStorage.delete(key: _kTokenKey);
     } catch (_) {
       _errorMessage =
           'Your account was deleted, but some data could not be removed from this device.';
@@ -176,8 +189,7 @@ class AuthProvider extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   Future<void> _persistAndSet(User user, String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kTokenKey, token);
+    await _tokenStorage.write(key: _kTokenKey, value: token);
     _token = token;
     _user = user;
     _status = AuthStatus.authenticated;
